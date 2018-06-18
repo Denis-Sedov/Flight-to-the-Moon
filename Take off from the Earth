@@ -1,19 +1,20 @@
 import math
 
 #данные для барометрической формулы:
-m_m = 0.00482 * 10 ** (-23) # масса молекул воздуха, г
-T = 284.9 # температура, К
+m_m = 0.00482 * 10 ** (-23) # масса молекулы, г
+T = 288.2 # температура, К
 p0 = 1.1673 #начальная плотность атмосферы, г/см ** 3
 k_m = 1.38 * 10 ** (-23) # постоянная Больцмана
 #коэффициенты в силе сопротивления:
 Cx = 0.85
 z = 34580.4# M / S
+
 v_0 = 465.1# скорость Земли на экваторе, м/с
 dt = 0.01# время интергирования, с
 V = 7782 # конечная скорость, м/с
 M = 2766700# начальная масса ракеты, кг
-w = 39.3 * 10 ** 13# гравитационная постоянная * масса Земли
-R = 6.37 * 10 ** 6# радиус Земли, м
+w = 39.3 * 10 ** 13 # гравитационная постоянная * масса Земли
+R = 6.37 * 10 ** 6 # радиус Земли, м
 # масса топлива ступеней, кг
 m1 = 2010000
 m2 = 421100
@@ -33,16 +34,12 @@ m_1 = 135000
 m_2 = 37600
 m_3 = 20000
 m_s = [m_1, m_2, m_3]
-k = [F1 / u1, F2 / u2, F3 / u3]
+k = [F1 / u1, F2 / u2, F3 / u3] # расход топлива, кг/с
 # начальные данные
-x_0 = 0
-x = 0
-h = 0
-h_0 = 0
-v0 = 0
-v0_y = 0
-v_x = 0
-fi = 0
+r_0 = R
+fi_0 = 0
+v0_fi = v_0
+v0_r = 0
 q = 0
 t = 0
 # счетчики
@@ -50,88 +47,56 @@ s = 1
 i = 0
 c = 0
 n = 0
+K = 0
+alfa_0 = [0.0175, 0.0069, 0.0069] # нужные значения углов
+n_0 = [8976, 22764, 22764] # 1.5708(рад) / (alfa * dt)  
 
-
-def poehali(s, v0_y, x_0, h_0): # взлетаю вертикально вверх
-
+def poehali(s, c, v0_r, r_0, fi_0): 
+        
     q = k[i] * dt
     M_t = M - s * q # масса, зависящая от времени
-    g = w / (R + h_0) ** 2
-    Fs = Cx * p0 * math.exp (- m_m * g * h_0 / k_m / (T - c * 6.5) ) / z  # сила сопротивления
+    g = w / (r_0) ** 2
+    Fs = Cx * p0 * math.exp (- m_m * g * (r_0 - R) / k_m / (T - c * 0.065) ) / z  # сила сопротивления
     F_t = M_t * g # сила тяжести
-    a = (F[i] - Fs - F_t * math.cos (fi)) / M_t
-    v_y = a * dt + v0_y
-    x = x_0 + v_0 * dt
-    v = math.hypot(v_0, v_y)
-    h = h_0 + v_y * dt
-    r = math.hypot(h, x)
-    fi_0 = math.acos(h / math.hypot(x, h))
-    
-    return v_y, x, h, r, v, fi_0
+    a = (F[i] - Fs - F_t ) / M_t
+    v0_r += a * dt
+    r_0 += v0_r * dt
+    fi_0 += v0_fi * dt / r_0
 
-
-def dostigenie_h(s, c, v0_y, x_0, h_0):
+    return v0_r, v0_fi, r_0, fi_0
     
-    P = poehali(s, v0_y, x_0, h_0)
-    while P[3] <= 10000:
+
+def dostigenie_h(s, c, v0_r, v0_fi, r_0, fi_0): # взлетаю вертикально вверх
+    
+    P = poehali(s, c, v0_r, r_0, fi_0)
+    while P[2] * math.cos(fi_0) <= 10000 + R:
         
         s += 1
-        c += 0.13
-        v0_y = P[0]
-        x_0 = P[1]
-        h_0 = P[2]
-        P = poehali(s, v0_y, x_0, h_0)
-        
-    return P[3], P[4], P[5], s # r, v, fi_0
+        c += 0.0015
+        v0_r = P[0]
+        r_0 = P[2]
+        fi_0 = P[3]
+        P = poehali(s, c, v0_r, r_0, fi_0)
 
-
-def checking_r(r):# достигли орбиты?
-    
-    if r >= 185000:
-        alfa = 1.57079
-        return alfa
-
-    else:
-        return True
+    return P[0], P[1], P[2], P[3], s # v_r, v_fi, r, fi
 
     
-def abeam_poehali(i, v, r_0, fi_0, s, n, M): # движение под углом
+def abeam_poehali(i, v0_r, v0_fi, r_0, fi_0, s, n, M, c): # движение под углом
 
     q = k[i] * dt
     M_t = M - s * q
-    g = w / (R + (r_0 * math.sin(fi_0))) ** 2
-    Fs = Cx * p0 * math.exp (-m_m * g * r_0 * math.sin(fi_0) / k_m / (T - c * 6.5) ) / z
+    g = w / (r_0) ** 2
+    Fs = Cx * p0 * math.exp (-m_m * g * (r_0 - R) / k_m / (T - c * 6.5) ) / z
     F_t = M_t * g
-    
-    C = checking_r(r_0)
-    
-    if C == True:
-
-        alfa = 0.0067 * dt
-        v0_fi = v * math.sin(n * alfa)
-        v0_r = v * math.cos(n * alfa)
-        a_fi = (F[i] - Fs) * math.sin(n * alfa) / M_t
-        a_r = ((F[i] - Fs) * math.cos(n * alfa) - F_t) / M_t
-        v_fi = v0_fi + a_fi * dt
-        v_r = a_r * dt + v0_r
-        v = math.hypot(v_fi, v_r)
-        r = v_r * dt + r_0
-        fi = v_fi * dt / r_0 + fi_0
-        
-    else:
-        
-        alfa = C
-        v0_fi = v * math.sin(n * alfa)
-        v0_r = v * math.cos(n * alfa)
-        a_fi = (F[i] - Fs) * math.sin(n * alfa) / M_t
-        a_r = ((F[i] - Fs) * math.cos(n * alfa) - F_t) / M_t
-        v_fi = v0_fi + a_fi * dt
-        v_r = a_r * dt + v0_r
-        v = math.hypot(v_fi, v_r)
-        r = v_r * dt + r_0
-        fi = v_fi * dt / r_0 + fi_0
+    alfa = alfa_0[i] * dt
+    a_fi = (F[i] - Fs) * math.sin(n * alfa) / M_t
+    a_r = ((F[i] - Fs) * math.cos(n * alfa) - F_t) / M_t
+    v_fi = v0_fi + a_fi * dt 
+    v_r = a_r * dt + v0_r
+    r = v_r * dt + r_0
+    fi = v_fi * dt / r + fi_0
            
-    return v_r, q, r, v_fi, fi, m[i] - s * q
+    return v_r, r, v_fi, fi, m[i] - s * q, a_r
 
 
 def ending_mass(s, i, M):# проверка массы
@@ -142,56 +107,63 @@ def ending_mass(s, i, M):# проверка массы
     
         M = M - m_s[i] - m[i]
         i += 1
-        
+
         return M, i
     
     else:
         return True
 
 
-def arrival_in(i, v, r_0, fi_0, s, n, t, M):# достижение нужной скорости
+def arrival_in(i, v0_r, v0_fi, r_0, fi_0, s, n, t, M, c, K):# достижение нужной скорости
     
-    while abeam_poehali(i, v, r_0, fi_0, s, n, M)[3] <= V:
+    while abeam_poehali(i, v0_r, v0_fi, r_0, fi_0, s, n, M, c)[2] <= V:
 
-        A = abeam_poehali(i, v, r_0, fi_0, s, n, M)
-        C = checking_r(A[2])
+        A = abeam_poehali(i, v0_r, v0_fi, r_0, fi_0, s, n, M, c)
+        C = checking_r(A[1], n)
         E = ending_mass(s, i, M)
         if E == True:
             
-            r_0 = A[2]
-            v = math.hypot(A[0], A[3])
+            r_0 = A[1]
+            fi_0 = A[3]
+            v0_r = A[0]
+            v0_fi = A[2]
             s += 1
+            K += 1
+            alfa = alfa_0[i] * dt
             
-            if C == True:
+            if A[5] < 3 and n > 0 and n * alfa > 1.035:
+                n -= 1
+            elif n < n_0[i]:
                 n += 1
-            else:
-                n = 1 
-        
-            
+    
         else:
+    
             i = E[1]
             M = E[0]
+            print(s, v0_fi, r_0, fi_0, math.sin(n * alfa))
             t += s
             s = 1
             
+    A = abeam_poehali(i, v0_r, v0_fi, r_0, fi_0, s, n, M, c)     
 
-    return A[3], A[2], A[4], (t + s) * dt, A[5] # v_fi, r, fi, конечная масса
+    return A[2], A[1], A[3], (t + s) * dt, A[4] #v_fi, r, fi, время полета, конечная масса
 
-def projection(r, v_fi, fi):# перевод в общую СО
+def projection(v_fi, r, fi): # переводв общую СО
 
-    y = r * math.sin(fi) + R
-    x = r * math.cos(fi)
+    y = r * math.cos(fi)
+    x = r * math.sin(fi)
     Fi = math.atan(x / y)
     v_x = v_fi * math.sin(Fi)
     v_y = v_fi * math.cos(Fi)
 
-    return x, y, v_x, v_y, math.degrees(Fi)
+    return x, y, v_x, v_y
     
 def main():
     
-    D = dostigenie_h(s, c, v0_y, x_0, h_0)
-    A = arrival_in(i, D[1], D[0], D[2], D[3], n, t, M)
-    P = projection(A[1], A[0], A[2])
-    print(P, A[3], A[4])
+    D = dostigenie_h (s, c, v0_r, v0_fi, r_0, fi_0)
+    A = arrival_in (i, D[0], D[1], D[2], D[3], D[4], n, t, M, c, K)
+    P = projection (A[0], A[1], A[2])
+    print(P, A)
 
 main()
+
